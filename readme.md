@@ -1,3 +1,5 @@
+#☠️This is in Beta, please use under your own responsibility☠️ 
+
 # Pi-Tuner 🐾
 
 A complete, real-time tuning tool for your Raspberry Pi 5 — with true fan, clock, and voltage control. Inspired by MSI Afterburner, built to serve your system with power and style.
