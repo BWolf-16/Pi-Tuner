@@ -70,57 +70,67 @@ class PiTuner(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Pi-Tuner")
-        self.geometry("600x600")
+        self.geometry("700x600")
         ctk.set_appearance_mode("dark")
 
+        self.grid_columnconfigure((0, 1), weight=1)
+        self.grid_rowconfigure((0, 1, 2, 3), weight=1)
+
+        # Stat Labels
         self.temp = ctk.CTkLabel(self, text="Temp: -- °C")
-        self.temp.pack(pady=5)
+        self.temp.grid(row=0, column=0, padx=10, pady=10, sticky="w")
 
         self.clock = ctk.CTkLabel(self, text="Clock: -- MHz")
-        self.clock.pack(pady=5)
+        self.clock.grid(row=0, column=1, padx=10, pady=10, sticky="w")
 
         self.volt = ctk.CTkLabel(self, text="Voltage: -- V")
-        self.volt.pack(pady=5)
+        self.volt.grid(row=0, column=2, padx=10, pady=10, sticky="w")
 
-        # Clock Slider
-        ctk.CTkLabel(self, text="CPU Clock (MHz)").pack()
-        self.clock_slider = ctk.CTkSlider(self, from_=600, to=2500, command=self.update_clock_label)
+        # Sliders Section
+        slider_frame = ctk.CTkFrame(self)
+        slider_frame.grid(row=1, column=0, columnspan=3, pady=10, padx=10, sticky="nsew")
+        slider_frame.grid_columnconfigure((0, 1), weight=1)
+
+        ctk.CTkLabel(slider_frame, text="CPU Clock (MHz)").grid(row=0, column=0, sticky="w")
+        self.clock_slider = ctk.CTkSlider(slider_frame, from_=600, to=2500, command=self.update_clock_label)
         self.clock_slider.set(1500)
-        self.clock_slider.pack()
-        self.clock_val = ctk.CTkLabel(self, text="1500 MHz")
-        self.clock_val.pack()
+        self.clock_slider.grid(row=0, column=1, sticky="ew")
+        self.clock_val = ctk.CTkLabel(slider_frame, text="1500 MHz")
+        self.clock_val.grid(row=0, column=2, padx=10)
 
-        # Voltage Slider
-        ctk.CTkLabel(self, text="Over Voltage (0 to 6)").pack()
-        self.volt_slider = ctk.CTkSlider(self, from_=0, to=6, number_of_steps=6, command=self.update_volt_label)
+        ctk.CTkLabel(slider_frame, text="Over Voltage (0 to 6)").grid(row=1, column=0, sticky="w")
+        self.volt_slider = ctk.CTkSlider(slider_frame, from_=0, to=6, number_of_steps=6, command=self.update_volt_label)
         self.volt_slider.set(0)
-        self.volt_slider.pack()
-        self.volt_val = ctk.CTkLabel(self, text="0")
-        self.volt_val.pack()
+        self.volt_slider.grid(row=1, column=1, sticky="ew")
+        self.volt_val = ctk.CTkLabel(slider_frame, text="0")
+        self.volt_val.grid(row=1, column=2, padx=10)
 
-        # Fan Control
-        ctk.CTkLabel(self, text="Fan Speed (%)").pack()
-        self.fan_slider = ctk.CTkSlider(self, from_=0, to=100, command=self.update_fan_label)
+        ctk.CTkLabel(slider_frame, text="Fan Speed (%)").grid(row=2, column=0, sticky="w")
+        self.fan_slider = ctk.CTkSlider(slider_frame, from_=0, to=100, command=self.update_fan_label)
         self.fan_slider.set(100)
-        self.fan_slider.pack()
-        self.fan_val = ctk.CTkLabel(self, text="100 %")
-        self.fan_val.pack()
+        self.fan_slider.grid(row=2, column=1, sticky="ew")
+        self.fan_val = ctk.CTkLabel(slider_frame, text="100 %")
+        self.fan_val.grid(row=2, column=2, padx=10)
 
-        # Profile Tools
-        self.profile_entry = ctk.CTkEntry(self, placeholder_text="Profile Name")
-        self.profile_entry.pack(pady=5)
+        # Controls Section
+        controls = ctk.CTkFrame(self)
+        controls.grid(row=2, column=0, columnspan=3, pady=10, padx=10, sticky="nsew")
 
-        self.save_btn = ctk.CTkButton(self, text="Save Profile", command=self.save_current)
-        self.save_btn.pack(pady=5)
+        self.profile_entry = ctk.CTkEntry(controls, placeholder_text="Profile Name")
+        self.profile_entry.grid(row=0, column=0, padx=5, pady=5)
 
-        self.apply_btn = ctk.CTkButton(self, text="Apply Settings", command=self.apply_all)
-        self.apply_btn.pack(pady=5)
+        self.save_btn = ctk.CTkButton(controls, text="Save Profile", command=self.save_current)
+        self.save_btn.grid(row=0, column=1, padx=5, pady=5)
 
-        self.reset_btn = ctk.CTkButton(self, text="Restore Default", command=self.restore_default)
-        self.reset_btn.pack(pady=5)
+        self.profile_menu = ctk.CTkOptionMenu(controls, values=["None"], command=self.load_profile)
+        self.profile_menu.grid(row=0, column=2, padx=5, pady=5)
 
-        self.profile_menu = ctk.CTkOptionMenu(self, values=["None"], command=self.load_profile)
-        self.profile_menu.pack(pady=10)
+        self.apply_btn = ctk.CTkButton(controls, text="Apply Settings", command=self.apply_all)
+        self.apply_btn.grid(row=1, column=0, padx=5, pady=5)
+
+        self.reset_btn = ctk.CTkButton(controls, text="Restore Default", command=self.restore_default)
+        self.reset_btn.grid(row=1, column=1, padx=5, pady=5)
+
         self.refresh_profiles()
 
         self.update_thread = threading.Thread(target=self.update_stats, daemon=True)
