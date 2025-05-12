@@ -1,0 +1,13 @@
+[Unit]
+Description=Pi-Tuner Autostart
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/pi/Pi-Tuner-Complete/pi_tuner.py
+WorkingDirectory=/home/pi/Pi-Tuner-Complete
+Restart=on-failure
+User=pi
+
+[Install]
+WantedBy=multi-user.target

@@ -1,1 +1,7 @@
-{}
+{
+    "Default": {
+        "clock": 1500,
+        "voltage": 0,
+        "fan": 100
+    }
+}

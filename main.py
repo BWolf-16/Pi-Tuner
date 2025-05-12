@@ -1,180 +1,181 @@
-
+# Final Pi-Tuner Main Code
 import os
-import subprocess
 import json
 import time
 import threading
+import subprocess
 import customtkinter as ctk
 from tkinter import messagebox
 
-PROFILE_PATH = "pi5_profiles.json"
+PROFILE_FILE = "pi5_profiles.json"
+CONFIG_PATH = "/boot/firmware/config.txt"
 
-def read_temperature():
+# Utility Functions
+def get_temp():
     try:
-        output = subprocess.check_output(["vcgencmd", "measure_temp"]).decode()
-        return float(output.split('=')[1].split("'")[0])
+        out = subprocess.check_output(["vcgencmd", "measure_temp"]).decode()
+        return float(out.split("=")[1].split("'")[0])
     except:
         return 0.0
 
-def read_clock():
+def get_clock():
     try:
-        output = subprocess.check_output(["vcgencmd", "measure_clock", "arm"]).decode()
-        return int(output.strip().split('=')[1]) / 1_000_000
+        out = subprocess.check_output(["vcgencmd", "measure_clock", "arm"]).decode()
+        return int(out.strip().split("=")[1]) / 1_000_000
     except:
         return 0.0
 
-def read_voltage():
+def get_voltage():
     try:
-        output = subprocess.check_output(["vcgencmd", "measure_volts"]).decode()
-        return float(output.split('=')[1].replace("V", ""))
+        out = subprocess.check_output(["vcgencmd", "measure_volts"]).decode()
+        return float(out.split("=")[1].replace("V", ""))
     except:
         return 0.0
 
-def read_fan_speed():
-    return 50  # Simulated
+# Real Fan Control via GPIO18 (PWM)
+def set_fan_pwm(percent):
+    duty = int((percent / 100.0) * 1023)
+    os.system(f"gpio -g mode 18 pwm && gpio -g pwm 18 {duty}")
 
-def apply_settings(clock=None, voltage=None, fan=None):
-    if clock:
-        os.system(f"sudo cpufreq-set -u {clock}MHz")
-    # Real fan/voltage control would require hardware-specific tools
+# Config File Updates
+def apply_voltage_clock(clock, overvolt):
+    with open(CONFIG_PATH, "r") as f:
+        lines = f.readlines()
+    lines = [line for line in lines if not any(x in line for x in ["arm_freq=", "over_voltage=", "force_turbo="])]
+    lines.append(f"force_turbo=1\n")
+    lines.append(f"arm_freq={clock}\n")
+    lines.append(f"over_voltage={overvolt}\n")
+    with open(CONFIG_PATH, "w") as f:
+        f.writelines(lines)
+    subprocess.run(["vcgencmd", "measure_volts"])  # force reread
 
-def save_profile(name, clock, voltage, fan):
-    if os.path.exists(PROFILE_PATH):
-        with open(PROFILE_PATH, "r") as f:
+def save_profile(name, clock, volt, fan):
+    try:
+        with open(PROFILE_FILE, "r") as f:
             profiles = json.load(f)
-    else:
+    except:
         profiles = {}
-    profiles[name] = {"clock": clock, "voltage": voltage, "fan": fan}
-    with open(PROFILE_PATH, "w") as f:
+    profiles[name] = {"clock": clock, "voltage": volt, "fan": fan}
+    with open(PROFILE_FILE, "w") as f:
         json.dump(profiles, f, indent=4)
 
 def load_profiles():
-    if os.path.exists(PROFILE_PATH):
-        with open(PROFILE_PATH, "r") as f:
+    if os.path.exists(PROFILE_FILE):
+        with open(PROFILE_FILE, "r") as f:
             return json.load(f)
     return {}
 
-class Pi5MonitorApp(ctk.CTk):
+# GUI Class
+class PiTuner(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Pi-Tuner")
-        self.geometry("600x550")
+        self.geometry("600x600")
         ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("blue")
 
-        self.temp_label = ctk.CTkLabel(self, text="Temp: -- °C")
-        self.temp_label.pack(pady=10)
+        self.temp = ctk.CTkLabel(self, text="Temp: -- °C")
+        self.temp.pack(pady=5)
 
-        self.clock_label = ctk.CTkLabel(self, text="Clock: -- MHz")
-        self.clock_label.pack(pady=10)
+        self.clock = ctk.CTkLabel(self, text="Clock: -- MHz")
+        self.clock.pack(pady=5)
 
-        self.volt_label = ctk.CTkLabel(self, text="Voltage: -- V")
-        self.volt_label.pack(pady=10)
+        self.volt = ctk.CTkLabel(self, text="Voltage: -- V")
+        self.volt.pack(pady=5)
 
-        self.fan_label = ctk.CTkLabel(self, text="Fan Speed: -- %")
-        self.fan_label.pack(pady=10)
-
-        ctk.CTkLabel(self, text="Clock (MHz)").pack()
-        self.clock_slider = ctk.CTkSlider(self, from_=100, to=2500, command=self.update_clock_value)
+        # Clock Slider
+        ctk.CTkLabel(self, text="CPU Clock (MHz)").pack()
+        self.clock_slider = ctk.CTkSlider(self, from_=600, to=2500, command=self.update_clock_label)
         self.clock_slider.set(1500)
         self.clock_slider.pack()
         self.clock_val = ctk.CTkLabel(self, text="1500 MHz")
         self.clock_val.pack()
 
-        ctk.CTkLabel(self, text="Voltage (V)").pack()
-        self.voltage_slider = ctk.CTkSlider(self, from_=0.8, to=1.4, command=self.update_voltage_value)
-        self.voltage_slider.set(1.1)
-        self.voltage_slider.pack()
-        self.volt_val = ctk.CTkLabel(self, text="1.10 V")
+        # Voltage Slider
+        ctk.CTkLabel(self, text="Over Voltage (0 to 6)").pack()
+        self.volt_slider = ctk.CTkSlider(self, from_=0, to=6, number_of_steps=6, command=self.update_volt_label)
+        self.volt_slider.set(0)
+        self.volt_slider.pack()
+        self.volt_val = ctk.CTkLabel(self, text="0")
         self.volt_val.pack()
 
+        # Fan Control
         ctk.CTkLabel(self, text="Fan Speed (%)").pack()
-        self.fan_slider = ctk.CTkSlider(self, from_=0, to=100, command=self.update_fan_value)
-        self.fan_slider.set(50)
+        self.fan_slider = ctk.CTkSlider(self, from_=0, to=100, command=self.update_fan_label)
+        self.fan_slider.set(100)
         self.fan_slider.pack()
-        self.fan_val = ctk.CTkLabel(self, text="50 %")
+        self.fan_val = ctk.CTkLabel(self, text="100 %")
         self.fan_val.pack()
 
+        # Profile Tools
         self.profile_entry = ctk.CTkEntry(self, placeholder_text="Profile Name")
         self.profile_entry.pack(pady=5)
 
-        self.save_button = ctk.CTkButton(self, text="Save Profile", command=self.save_profile_action)
-        self.save_button.pack(pady=5)
+        self.save_btn = ctk.CTkButton(self, text="Save Profile", command=self.save_current)
+        self.save_btn.pack(pady=5)
 
-        self.apply_button = ctk.CTkButton(self, text="Apply Settings", command=self.apply_current)
-        self.apply_button.pack(pady=5)
+        self.apply_btn = ctk.CTkButton(self, text="Apply Settings", command=self.apply_all)
+        self.apply_btn.pack(pady=5)
 
-        self.reset_button = ctk.CTkButton(self, text="Reset", command=self.reset_sliders)
-        self.reset_button.pack(pady=5)
+        self.reset_btn = ctk.CTkButton(self, text="Restore Default", command=self.restore_default)
+        self.reset_btn.pack(pady=5)
 
-        self.profile_menu = ctk.CTkOptionMenu(self, values=["None"], command=self.load_selected_profile)
+        self.profile_menu = ctk.CTkOptionMenu(self, values=["None"], command=self.load_profile)
         self.profile_menu.pack(pady=10)
+        self.refresh_profiles()
 
-        self.update_profiles()
-        self.update_stats()
-        self.polling_thread = threading.Thread(target=self.live_update, daemon=True)
-        self.polling_thread.start()
+        self.update_thread = threading.Thread(target=self.update_stats, daemon=True)
+        self.update_thread.start()
 
     def update_stats(self):
-        temp = read_temperature()
-        clock = read_clock()
-        volt = read_voltage()
-        fan = read_fan_speed()
-        self.temp_label.configure(text=f"Temp: {temp:.1f} °C")
-        self.clock_label.configure(text=f"Clock: {clock:.0f} MHz")
-        self.volt_label.configure(text=f"Voltage: {volt:.2f} V")
-        self.fan_label.configure(text=f"Fan Speed: {fan} %")
-
-    def live_update(self):
         while True:
-            self.update_stats()
+            self.temp.configure(text=f"Temp: {get_temp():.1f} °C")
+            self.clock.configure(text=f"Clock: {get_clock():.0f} MHz")
+            self.volt.configure(text=f"Voltage: {get_voltage():.2f} V")
             time.sleep(2)
 
-    def update_clock_value(self, value):
-        self.clock_val.configure(text=f"{int(value)} MHz")
+    def update_clock_label(self, val):
+        self.clock_val.configure(text=f"{int(val)} MHz")
 
-    def update_voltage_value(self, value):
-        self.volt_val.configure(text=f"{value:.2f} V")
+    def update_volt_label(self, val):
+        self.volt_val.configure(text=f"{int(val)}")
 
-    def update_fan_value(self, value):
-        self.fan_val.configure(text=f"{int(value)} %")
+    def update_fan_label(self, val):
+        self.fan_val.configure(text=f"{int(val)} %")
 
-    def save_profile_action(self):
+    def save_current(self):
         name = self.profile_entry.get()
-        if not name:
-            messagebox.showwarning("Error", "Profile name is empty.")
-            return
-        clock = int(self.clock_slider.get())
-        voltage = round(self.voltage_slider.get(), 2)
-        fan = int(self.fan_slider.get())
-        save_profile(name, clock, voltage, fan)
-        self.update_profiles()
-        messagebox.showinfo("Saved", f"Profile '{name}' saved.")
+        if name:
+            save_profile(name, int(self.clock_slider.get()), int(self.volt_slider.get()), int(self.fan_slider.get()))
+            self.refresh_profiles()
+            messagebox.showinfo("Saved", f"Profile '{name}' saved.")
 
-    def update_profiles(self):
+    def refresh_profiles(self):
         profiles = load_profiles()
         self.profile_menu.configure(values=["None"] + list(profiles.keys()))
 
-    def load_selected_profile(self, name):
+    def load_profile(self, name):
         profiles = load_profiles()
         if name in profiles:
-            profile = profiles[name]
-            self.clock_slider.set(profile["clock"])
-            self.voltage_slider.set(profile["voltage"])
-            self.fan_slider.set(profile["fan"])
+            data = profiles[name]
+            self.clock_slider.set(data["clock"])
+            self.volt_slider.set(data["voltage"])
+            self.fan_slider.set(data["fan"])
 
-    def apply_current(self):
-        clock = int(self.clock_slider.get())
-        voltage = round(self.voltage_slider.get(), 2)
+    def apply_all(self):
+        clk = int(self.clock_slider.get())
+        ov = int(self.volt_slider.get())
         fan = int(self.fan_slider.get())
-        apply_settings(clock, voltage, fan)
-        messagebox.showinfo("Applied", f"Settings applied: {clock} MHz, {voltage} V, {fan}% fan")
+        os.system(f"sudo cpufreq-set -u {clk}MHz")
+        apply_voltage_clock(clk, ov)
+        set_fan_pwm(fan)
+        messagebox.showinfo("Applied", "Settings applied.")
 
-    def reset_sliders(self):
+    def restore_default(self):
         self.clock_slider.set(1500)
-        self.voltage_slider.set(1.1)
-        self.fan_slider.set(50)
-        messagebox.showinfo("Reset", "Sliders reset to default.")
+        self.volt_slider.set(0)
+        self.fan_slider.set(100)
+        self.apply_all()
 
-app = Pi5MonitorApp()
-app.mainloop()
+if __name__ == "__main__":
+    app = PiTuner()
+    app.mainloop()
