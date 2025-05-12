@@ -1,4 +1,3 @@
-# Final Pi-Tuner Main Code
 import os
 import json
 import time
