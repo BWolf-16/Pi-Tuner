@@ -1,4 +1,4 @@
-#☠️This is in Beta, please use under your own responsibility☠️ 
+# ☠️This is in Beta, please use under your own responsibility☠️
 
 I will redo everything from 0 please wait for an update :)
 
