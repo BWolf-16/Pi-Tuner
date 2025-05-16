@@ -113,11 +113,8 @@ class PiTunerApp(ctk.CTk):
 
     def set_voltage(self):
         voltage = self.voltage.get()
-        config_lines = ["over_voltage=0\n", "force_turbo=0\n"]
-        if voltage > 0:
-            config_lines = [f"over_voltage={voltage}\n", "force_turbo=1\n"]
-        with open("/boot/firmware/config.txt", "w") as file:
-            file.writelines(config_lines)
+        subprocess.run(["sudo", "sed", "-i", f"/over_voltage=/c\over_voltage={voltage}", "/boot/firmware/config.txt"])
+        subprocess.run(["sudo", "sed", "-i", f"/force_turbo=/c\force_turbo={1 if voltage > 0 else 0}", "/boot/firmware/config.txt"])
 
     def set_fan_speed(self):
         speed = int(self.fan_speed.get() * 255 / 100)
